@@ -99,6 +99,7 @@ import com.github.damontecres.wholphin.ui.data.BoxSetSortOptions
 import com.github.damontecres.wholphin.ui.data.SortAndDirection
 import com.github.damontecres.wholphin.ui.detail.music.MusicQueueMarker
 import com.github.damontecres.wholphin.ui.detail.music.MusicViewModel
+import com.github.damontecres.wholphin.ui.detail.vote.MovieNightVoteDialog
 import com.github.damontecres.wholphin.ui.enableMarquee
 import com.github.damontecres.wholphin.ui.equalsNotNull
 import com.github.damontecres.wholphin.ui.formatDateTime
@@ -120,6 +121,7 @@ import com.github.damontecres.wholphin.util.ExceptionHandler
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
 import com.github.damontecres.wholphin.util.LoadingState
 import com.github.damontecres.wholphin.util.WholphinDispatchers
+import com.github.damontecres.wholphin.util.pickRandom
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
@@ -640,6 +642,10 @@ fun PlaylistDetailsContent(
     var savedIndex by rememberSaveable { mutableIntStateOf(0) }
     var focusedIndex by remember { mutableIntStateOf(savedIndex) }
     val focusedItem = items.getOrNull(focusedIndex)
+    // Nulls are entries the pager has not loaded yet. Distinct because a
+    // playlist may list the same movie twice, and ranking a movie against
+    // itself is meaningless, so each one is offered once.
+    val voteCandidates = remember(items) { items.filterNotNull().distinctBy { it.id } }
     LaunchedEffect(focusedItem) {
         focusedItem?.let(onChangeBackdrop)
     }
@@ -651,6 +657,8 @@ fun PlaylistDetailsContent(
     }
 
     val playButtonFocusRequester = remember { FocusRequester() }
+
+    var showVoteDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier,
@@ -677,6 +685,23 @@ fun PlaylistDetailsContent(
                 PlaylistDetailsHeader(
                     focusedItem = focusedItem,
                     onClickPlay = onClickPlay,
+                    onClickVote = {
+                        // Nothing to rank against, so skip the ballot.
+                        if (voteCandidates.size <= 1) {
+                            voteCandidates.firstOrNull()?.let { item ->
+                                val index = items.indexOf(item)
+                                if (index >= 0) onClickIndex.invoke(index, item)
+                            }
+                        } else {
+                            showVoteDialog = true
+                        }
+                    },
+                    onClickRandomPick = {
+                        voteCandidates.pickRandom()?.let { item ->
+                            val index = items.indexOf(item)
+                            if (index >= 0) onClickIndex.invoke(index, item)
+                        }
+                    },
                     playButtonFocusRequester = playButtonFocusRequester,
                     focusRequester = if (items.isEmpty()) focusRequester else remember { FocusRequester() },
                     filterAndSort = filterAndSort,
@@ -724,6 +749,17 @@ fun PlaylistDetailsContent(
             }
         }
     }
+    if (showVoteDialog) {
+        MovieNightVoteDialog(
+            candidates = voteCandidates,
+            onDismissRequest = { showVoteDialog = false },
+            onWinnerSelected = { winner ->
+                val index = items.indexOf(winner)
+                if (index >= 0) onClickIndex.invoke(index, winner)
+                showVoteDialog = false
+            },
+        )
+    }
 }
 
 @Composable
@@ -731,6 +767,8 @@ fun PlaylistDetailsHeader(
     focusedItem: BaseItem?,
     filterOptions: List<ItemFilterBy<*>>,
     onClickPlay: (shuffle: Boolean) -> Unit,
+    onClickVote: () -> Unit,
+    onClickRandomPick: () -> Unit,
     playButtonFocusRequester: FocusRequester,
     focusRequester: FocusRequester,
     filterAndSort: FilterAndSort,
@@ -757,6 +795,21 @@ fun PlaylistDetailsHeader(
                 title = R.string.shuffle,
                 iconStringRes = R.string.fa_shuffle,
                 onClick = { onClickPlay.invoke(true) },
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier,
+        ) {
+            ExpandableFaButton(
+                title = R.string.movie_night_vote,
+                iconStringRes = R.string.fa_list_ul,
+                onClick = onClickVote,
+            )
+            ExpandableFaButton(
+                title = R.string.movie_night_random_pick,
+                iconStringRes = R.string.fa_dice,
+                onClick = onClickRandomPick,
             )
         }
         Row(

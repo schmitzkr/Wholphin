@@ -138,6 +138,15 @@
     <string name="show">Show</string>
     <string name="shuffle">Shuffle</string>
     <string name="skip">Skip</string>
+    <string name="movie_night_vote">Vote</string>
+    <string name="movie_night_random_pick">Random Pick</string>
+    <string name="movie_night_vote_prompt_grab">Voter %1$d: select a film to pick it up. Top is your favorite.</string>
+    <string name="movie_night_vote_prompt_drop">Voter %1$d: select where to put it down.</string>
+    <string name="movie_night_vote_submit_ballot">Submit Ballot</string>
+    <string name="movie_night_vote_finish">Finish Voting</string>
+    <string name="movie_night_vote_winner">Winner</string>
+    <string name="movie_night_vote_tied">It\'s a tie!</string>
+    <string name="movie_night_vote_pick_randomly">Pick Random Tie-Breaker</string>
     <string name="sort_by_date_added">Date Added</string>
     <string name="sort_by_date_episode_added">Date Episode Added</string>
     <string name="sort_by_date_played">Date Played</string>
