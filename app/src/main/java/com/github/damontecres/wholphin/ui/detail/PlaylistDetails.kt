@@ -116,6 +116,7 @@ import com.github.damontecres.wholphin.ui.toServerString
 import com.github.damontecres.wholphin.ui.tryRequestFocus
 import com.github.damontecres.wholphin.ui.util.LocalClock
 import com.github.damontecres.wholphin.util.ApiRequestPager
+import com.github.damontecres.wholphin.util.BlockingList
 import com.github.damontecres.wholphin.util.ExceptionHandler
 import com.github.damontecres.wholphin.util.GetItemsRequestHandler
 import com.github.damontecres.wholphin.util.LoadingState
@@ -426,6 +427,24 @@ class PlaylistViewModel
                 (state.value.items as? ApiRequestPager<*>)?.refreshPagesAfter(index - 1)
             }
         }
+
+        /**
+         * Navigate to a random item in the playlist
+         */
+        fun onClickRandom() {
+            viewModelScope.launchIO {
+                try {
+                    val random = (state.value.items as? BlockingList<BaseItem?>)?.randomBlocking()
+                    Timber.d("Got random item: %s", random?.id)
+                    random?.let { navigationManager.navigateTo(it.destination()) }
+                } catch (ex: CancellationException) {
+                    throw ex
+                } catch (ex: Exception) {
+                    Timber.e(ex, "Error getting random")
+                    showToast(context, "Error: ${ex.localizedMessage}")
+                }
+            }
+        }
     }
 
 @Immutable
@@ -551,6 +570,7 @@ fun PlaylistDetails(
                 play(0, it, shuffle)
             }
         },
+        onClickRandom = viewModel::onClickRandom,
         onShowContextMenu = { index, item, fromLongClick ->
             showContextMenu =
                 if (item.type == BaseItemKind.AUDIO) {
@@ -628,6 +648,7 @@ fun PlaylistDetailsContent(
     onClickIndex: (Int, BaseItem) -> Unit,
     onShowContextMenu: (Int, BaseItem, Boolean) -> Unit,
     onClickPlay: (shuffle: Boolean) -> Unit,
+    onClickRandom: () -> Unit,
     onChangeBackdrop: (BaseItem) -> Unit,
     onMoveItem: (Int, UUID, MoveDirection) -> Unit,
     filterAndSort: FilterAndSort,
@@ -644,9 +665,17 @@ fun PlaylistDetailsContent(
         focusedItem?.let(onChangeBackdrop)
     }
     val focusRequester = remember { FocusRequester() }
+    // Track if leaving page due to clicking the random button so focus can be restored there
+    var clickedRandom by rememberSaveable { mutableStateOf(false) }
+    val randomButtonFocusRequester = remember { FocusRequester() }
     LaunchedEffect(loadingState) {
         if (loadingState is LoadingState.Success || loadingState is LoadingState.Error) {
-            focusRequester.tryRequestFocus()
+            if (clickedRandom) {
+                randomButtonFocusRequester.tryRequestFocus()
+            } else {
+                focusRequester.tryRequestFocus()
+            }
+            clickedRandom = false
         }
     }
 
@@ -676,7 +705,13 @@ fun PlaylistDetailsContent(
             ) {
                 PlaylistDetailsHeader(
                     focusedItem = focusedItem,
+                    listIsNotEmpty = items.isNotEmpty(),
                     onClickPlay = onClickPlay,
+                    onClickRandom = {
+                        clickedRandom = true
+                        onClickRandom.invoke()
+                    },
+                    randomButtonFocusRequester = randomButtonFocusRequester,
                     playButtonFocusRequester = playButtonFocusRequester,
                     focusRequester = if (items.isEmpty()) focusRequester else remember { FocusRequester() },
                     filterAndSort = filterAndSort,
@@ -729,9 +764,12 @@ fun PlaylistDetailsContent(
 @Composable
 fun PlaylistDetailsHeader(
     focusedItem: BaseItem?,
+    listIsNotEmpty: Boolean,
     filterOptions: List<ItemFilterBy<*>>,
     onClickPlay: (shuffle: Boolean) -> Unit,
+    onClickRandom: () -> Unit,
     playButtonFocusRequester: FocusRequester,
+    randomButtonFocusRequester: FocusRequester,
     focusRequester: FocusRequester,
     filterAndSort: FilterAndSort,
     onFilterAndSortChange: (GetItemsFilter, SortAndDirection) -> Unit,
@@ -757,6 +795,13 @@ fun PlaylistDetailsHeader(
                 title = R.string.shuffle,
                 iconStringRes = R.string.fa_shuffle,
                 onClick = { onClickPlay.invoke(true) },
+            )
+            ExpandableFaButton(
+                title = R.string.sort_by_random,
+                iconStringRes = R.string.fa_dice,
+                onClick = onClickRandom,
+                modifier = Modifier.focusRequester(randomButtonFocusRequester),
+                enabled = listIsNotEmpty,
             )
         }
         Row(
